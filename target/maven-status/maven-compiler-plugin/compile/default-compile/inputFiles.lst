@@ -1,0 +1,15 @@
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/DTO/CustomerDTO.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/DTO/TransactionDTO.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/DTO/TransferRequestDTO.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/Lab1arqApplication.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/config/CorsConfig.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/controller/CustomerController.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/controller/TransactionController.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/entity/Customer.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/entity/Transaction.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/mapper/CustomerMapper.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/mapper/TransactionMapper.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/repository/CustomerRepository.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/repository/TransactionRepository.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/service/CustomerService.java
+/Users/juantabares/Universidad/arquisoft/lab1arq/src/main/java/com/udea/lab1arq/service/TransactionService.java

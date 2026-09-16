@@ -1,0 +1,75 @@
+package com.udea.lab1arq.service;
+
+import com.udea.lab1arq.DTO.CustomerDTO;
+import com.udea.lab1arq.entity.Customer;
+import com.udea.lab1arq.mapper.CustomerMapper;
+import com.udea.lab1arq.repository.CustomerRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class CustomerService {
+
+    private final CustomerRepository customerRepository;
+    private final CustomerMapper customerMapper;
+
+    @Autowired
+    public CustomerService(CustomerRepository customerRepository, CustomerMapper customerMapper) {
+        this.customerRepository = customerRepository;
+        this.customerMapper = customerMapper;
+    }
+
+    public List<CustomerDTO> getAllCustomers() {
+        return customerRepository.findAll().stream()
+                .map(customerMapper::toDTO).toList();
+    }
+
+     public CustomerDTO getCustomerById(Long id) {
+        return customerRepository.findById(id).map(customerMapper::toDTO)
+            .orElseThrow(()->new RuntimeException("Customer not found"));
+     }
+
+     public CustomerDTO createCustomer(CustomerDTO customerDTO) {
+        Customer customer = customerMapper.toEntity(customerDTO);
+        return customerMapper.toDTO(customerRepository.save(customer ));
+     }
+
+    /**
+     * Actualizacion parcial: solo se sobreescriben los campos no nulos del DTO.
+     */
+    public CustomerDTO updateCustomer(Long id, CustomerDTO customerDTO) {
+        Customer customer = customerRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("El cliente con id " + id + " no existe."));
+
+        if (customerDTO.getFirstName() != null) {
+            customer.setFirstName(customerDTO.getFirstName());
+        }
+        if (customerDTO.getLastName() != null) {
+            customer.setLastName(customerDTO.getLastName());
+        }
+        if (customerDTO.getAccountNumber() != null
+                && !customerDTO.getAccountNumber().equals(customer.getAccountNumber())) {
+            Optional<Customer> owner = customerRepository.findByAccountNumber(customerDTO.getAccountNumber());
+            if (owner.isPresent()) {
+                throw new IllegalArgumentException(
+                        "El numero de cuenta " + customerDTO.getAccountNumber() + " ya esta asignado a otro cliente.");
+            }
+            customer.setAccountNumber(customerDTO.getAccountNumber());
+        }
+        if (customerDTO.getBalance() != null) {
+            customer.setBalance(customerDTO.getBalance());
+        }
+
+        return customerMapper.toDTO(customerRepository.save(customer));
+    }
+
+    public void deleteCustomer(Long id) {
+        if (!customerRepository.existsById(id)) {
+            throw new IllegalArgumentException("El cliente con id " + id + " no existe.");
+        }
+        customerRepository.deleteById(id);
+    }
+}
