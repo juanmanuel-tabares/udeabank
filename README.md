@@ -95,7 +95,7 @@ configuración del cliente está en [`frontend/README.md`](frontend/README.md).
 | Método | Ruta | Descripción |
 | --- | --- | --- |
 | `GET` | `/api/customers` | Lista todos los clientes |
-| `GET` | `/api/customers/{id}` | Consulta un cliente |
+| `GET` | `/api/customers/{id}` | Consulta un cliente (404 si no existe) |
 | `POST` | `/api/customers` | Crea un cliente |
 | `PUT` | `/api/customers/{id}` | Actualiza un cliente (parcial) |
 | `DELETE` | `/api/customers/{id}` | Elimina un cliente |
@@ -162,6 +162,41 @@ verde, se hace el merge. El push a `main` publica `latest` y despliega.
 | `DOCKER_PASSWORD` | Secret | Access token de Docker Hub |
 | `RENDER_DEPLOY_HOOK_URL` | Secret | Deploy Hook del servicio en Render |
 | `RENDER_SERVICE_URL` | Variable | URL pública del servicio, para la prueba de humo |
+
+---
+
+## Despliegue en la nube
+
+La API está desplegada en **Render** y usa **MySQL en Aiven**:
+<https://udeabank.onrender.com>
+
+```
+GitHub Actions ──push──► Docker Hub (juanmanueltabares/udeabank:latest)
+      │                          │
+      └──Deploy Hook──► Render (Web Service, plan Free) ──TLS──► Aiven MySQL
+```
+
+```bash
+curl https://udeabank.onrender.com/api/health
+curl https://udeabank.onrender.com/api/version
+curl https://udeabank.onrender.com/api/customers
+```
+
+> El plan gratuito de Render suspende el servicio tras 15 minutos sin
+> tráfico; la primera petición después de eso puede tardar cerca de un minuto.
+
+**Configuración del servicio en Render** (New → Web Service → Existing Image):
+
+| Campo | Valor |
+| --- | --- |
+| Image URL | `docker.io/juanmanueltabares/udeabank:latest` |
+| Instance Type | Free |
+| Health Check Path | `/api/health` |
+| Variables de entorno | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` (de Aiven) y `DB_SSL_MODE=REQUIRED` |
+
+En cada push a `main`, el job **Deploy to Render** llama al Deploy Hook,
+espera a que `/api/version` devuelva el commit recién publicado y verifica
+`/api/health` y `/api/customers`.
 
 ---
 
