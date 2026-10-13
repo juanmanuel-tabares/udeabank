@@ -1,8 +1,9 @@
 package com.udea.lab1arq.controller;
 
 import com.udea.lab1arq.DTO.CustomerDTO;
+import com.udea.lab1arq.exception.CustomerNotFoundException;
+import com.udea.lab1arq.exception.GlobalExceptionHandler;
 import com.udea.lab1arq.service.CustomerService;
-import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,7 +16,6 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -35,7 +35,9 @@ class CustomerControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(customerController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(customerController)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test
@@ -62,6 +64,15 @@ class CustomerControllerTest {
     }
 
     @Test
+    void getCustomerByIdReturnsNotFoundWhenMissing() throws Exception {
+        when(customerService.getCustomerById(99L)).thenThrow(new CustomerNotFoundException(99L));
+
+        mockMvc.perform(get("/api/customers/99"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string("El cliente con id 99 no existe."));
+    }
+
+    @Test
     void createCustomerReturnsCreatedCustomer() throws Exception {
         when(customerService.createCustomer(any(CustomerDTO.class)))
                 .thenReturn(new CustomerDTO(3L, "Sara", "Diaz", "1003", 250.0));
@@ -77,14 +88,15 @@ class CustomerControllerTest {
     }
 
     @Test
-    void createCustomerWithoutBalanceIsRejected() {
-        ServletException ex = assertThrows(ServletException.class, () -> mockMvc.perform(post("/api/customers")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                        {"firstName":"Sara","lastName":"Diaz","accountNumber":"1003"}
-                        """)));
+    void createCustomerWithoutBalanceReturnsBadRequest() throws Exception {
+        mockMvc.perform(post("/api/customers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"firstName":"Sara","lastName":"Diaz","accountNumber":"1003"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("Balance cannot be null"));
 
-        assertInstanceOf(IllegalArgumentException.class, ex.getCause());
         verify(customerService, never()).createCustomer(any());
     }
 

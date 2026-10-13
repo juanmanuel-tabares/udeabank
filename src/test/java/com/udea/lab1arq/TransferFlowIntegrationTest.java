@@ -67,6 +67,13 @@ class TransferFlowIntegrationTest {
     }
 
     @Test
+    void missingCustomerReturnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/customers/999999"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string("El cliente con id 999999 no existe."));
+    }
+
+    @Test
     void versionEndpointExposesConfiguredVersion() throws Exception {
         mockMvc.perform(get("/api/version"))
                 .andExpect(status().isOk())
