@@ -2,6 +2,7 @@ package com.udea.lab1arq.service;
 
 import com.udea.lab1arq.DTO.CustomerDTO;
 import com.udea.lab1arq.entity.Customer;
+import com.udea.lab1arq.exception.CustomerNotFoundException;
 import com.udea.lab1arq.mapper.CustomerMapper;
 import com.udea.lab1arq.repository.CustomerRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,8 +66,9 @@ class CustomerServiceTest {
     void getCustomerByIdThrowsWhenCustomerDoesNotExist() {
         when(customerRepository.findById(99L)).thenReturn(Optional.empty());
 
-        RuntimeException ex = assertThrows(RuntimeException.class, () -> customerService.getCustomerById(99L));
-        assertEquals("Customer not found", ex.getMessage());
+        CustomerNotFoundException ex = assertThrows(CustomerNotFoundException.class,
+                () -> customerService.getCustomerById(99L));
+        assertEquals("El cliente con id 99 no existe.", ex.getMessage());
     }
 
     @Test
