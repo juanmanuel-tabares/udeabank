@@ -1,0 +1,12 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Credenciales locales (ver .env.example)
+.env
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
