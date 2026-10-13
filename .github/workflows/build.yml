@@ -1,0 +1,198 @@
+#Workflow name
+name: CI/CD Pipeline
+
+on:
+  #Manually trigger workflow runs
+  workflow_dispatch:
+  #Trigger the workflow on push from the trunk (main) and the development branch
+  push:
+    branches:
+      - main
+      - develop
+  #Validate every pull request to main before the merge
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+#Only the latest run per branch is kept, except on main so a deploy is never cut in half
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  IMAGE_NAME: udeabank
+
+jobs:
+  #Test's job
+  tests:
+    name: Unit tests
+    #Run on Ubuntu using the latest version
+    runs-on: ubuntu-latest
+    #Job's steps
+    steps:
+      #Check-out your repository under $GITHUB_WORKSPACE, so your workflow can access it
+      - uses: actions/checkout@v7
+      #Set up JDK 17 with Maven cache
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      #Run Tests (JaCoCo generates the coverage report in the test phase)
+      - name: Run Tests
+        run: mvn -B test
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+
+  #Sonar's job
+  sonar:
+    name: SonarCloud analysis
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          #Full history so SonarCloud can compute new code and blame information
+          fetch-depth: 0
+      - name: Setup Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+      - name: Build project and SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        #projectKey, organization and host.url are defined in pom.xml; the scanner reads SONAR_TOKEN from the env
+        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+
+  #Build's job
+  build:
+    #Depends on sonar's job
+    needs: sonar
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      #Build the application using Maven
+      - name: Build with Maven
+        run: mvn -B package -DskipTests --file pom.xml
+      #Upload the JAR so the next jobs deploy exactly this artifact
+      - name: Upload JAR
+        uses: actions/upload-artifact@v7
+        with:
+          #Set artifact name
+          name: artifact
+          #From this path
+          path: target/udeabank.jar
+
+  #Docker's job: packages the JAR artifact in an image and publishes it on Docker Hub
+  #Third-party actions are pinned to a full commit SHA (supply-chain hardening, Sonar rule S7637)
+  docker:
+    name: Docker image
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download JAR
+        uses: actions/download-artifact@v8
+        with:
+          name: artifact
+          path: target
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      #Pull requests only build the image to validate it; pushes publish it
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: docker.io/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
+          #latest only for main; the branch name and the short commit for every push
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha
+      - name: Build & push Docker image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile
+          build-args: APP_COMMIT=${{ github.sha }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  #Deploy's job: Render pulls the new :latest image and the smoke test checks the live API
+  deploy:
+    name: Deploy to Render
+    needs: docker
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      RENDER_SERVICE_URL: ${{ vars.RENDER_SERVICE_URL }}
+    steps:
+      - name: Trigger Render deploy
+        id: hook
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "::warning::RENDER_DEPLOY_HOOK_URL is not configured; skipping the deploy."
+            echo "triggered=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+          echo "triggered=true" >> "$GITHUB_OUTPUT"
+      #Waits until Render serves this commit, then checks the main endpoints
+      - name: Smoke test on Render
+        if: steps.hook.outputs.triggered == 'true' && env.RENDER_SERVICE_URL != ''
+        run: |
+          url="${RENDER_SERVICE_URL%/}"
+          for attempt in $(seq 1 60); do
+            deployed=$(curl -s --max-time 30 "$url/api/version" | jq -r '.commit // empty' 2>/dev/null || true)
+            echo "Attempt $attempt: deployed commit '${deployed:-none}'"
+            if [ "$deployed" = "$GITHUB_SHA" ]; then
+              break
+            fi
+            if [ "$attempt" = 60 ]; then
+              echo "::error::Render did not serve commit $GITHUB_SHA within 15 minutes"
+              exit 1
+            fi
+            sleep 15
+          done
+          curl -fsS "$url/api/version"; echo
+          test "$(curl -fsS "$url/api/health")" = "HEALTH CHECK OK!"
+          curl -fsS -o /dev/null -w "GET /api/customers -> %{http_code}\n" "$url/api/customers"
+          echo "### Deployed $GITHUB_SHA to $url" >> "$GITHUB_STEP_SUMMARY"
