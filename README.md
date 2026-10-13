@@ -234,6 +234,20 @@ docker run -p 8080:8080 --env-file .env -e DB_HOST=host.docker.internal udeabank
 archivo `.env` o alguna de sus variables. Cópialo de `.env.example` y verifica
 que `DB_USERNAME` y `DB_PASSWORD` tengan valor.
 
+**`Field 'id' doesn't have a default value` al crear un cliente.** La base
+local se creó con una versión anterior, que generaba los ids con tablas
+`*_seq`. Ahora los ids usan `AUTO_INCREMENT` (`GenerationType.IDENTITY`), así
+que hay que recrear la base (borra los datos de prueba):
+
+```bash
+mysql -u root -p -e "DROP DATABASE udeabank; CREATE DATABASE udeabank;"
+```
+
+**`Unable to create or change a table without a primary key`.** El MySQL
+administrado (Aiven) exige llave primaria en todas las tablas. Las versiones
+anteriores creaban tablas `*_seq` sin llave; usa una base nueva con la versión
+actual.
+
 **`Access denied for user`.** Las credenciales del `.env` no coinciden con las
 de tu servidor MySQL.
 
